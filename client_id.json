@@ -1,0 +1,11 @@
+{"web":
+{
+"client_id":"1036780590000-2h64v5ltjn00vdjleh175rhjomn5pfop.apps.googleusercontent.com",
+"project_id":"vkbot1",
+"auth_uri":"https://accounts.google.com/o/oauth2/auth",
+"token_uri":"https://www.googleapis.com/oauth2/v3/token",
+"redirect_uris": [],
+"auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs",
+"client_secret":"CQqvXMpOz6_zq6xnpvWWPCZC"
+}
+}
