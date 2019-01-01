@@ -6,7 +6,6 @@ Created on Tue Jan  1 14:49:16 2019
 """
 
 SCOPES = [
-    'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/userinfo.email',
-    'https://www.googleapis.com/auth/userinfo.profile',
+'https://www.googleapis.com/auth/gmail.readonly',
+'https://mail.google.com/'
 ]
