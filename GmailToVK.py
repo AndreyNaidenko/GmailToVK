@@ -5,16 +5,16 @@ Created on Tue Jan  1 00:04:29 2019
 @author: Medvedev Denis
 """
 
-import vk
 from configuration import *
 from scopes import *
 from requests import post
 import time
-import oauth2client.service_account
-import httplib2
+import os
+import vk
 from googleapiclient.discovery import build
 from httplib2 import Http
 from oauth2client import file, client, tools
+from sqlalchemy import create_engine
 
 
 class GmailToVKbot():
@@ -43,6 +43,23 @@ class GmailToVKbot():
         else:
             print("\tSuccessfully \r\n")
 
+    def create_vk_id_base(self):
+        e = create_engine("sqlite:///vk_id.db")
+        e.execute("""
+                  create table vk_id (
+                          peer_id integer primary key
+                                     )
+                  """)
+
+    def add_to_vk_private_messages(self, peer_id):
+        if not os.path.exists("vk_id.db"):
+            self.create_vk_id_base()
+        e = create_engine("sqlite:///vk_id.db")
+        e.execute("""
+                  INSERT INTO `vk_id`(`peer_id`) VALUES (""" + str(peer_id) +
+                  """);
+                  """)
+
     def connect_to_GMAIL(self, scopes):
         print("Connection to gmail.com")
         try:
@@ -68,6 +85,16 @@ class GmailToVKbot():
 
     def get_last_message(self, user_id='me'):
         print('3')
+
+    def gmail_log_out(self, filename):
+        print('Start logout')
+        try:
+            os.remove(filename)
+        except:
+            print('\tLogout failed')
+            print('\t' + filename + 'is not exist!')
+        else:
+            print('\tLogout completed')
 
     def run(self):
         peer_id = None
@@ -99,7 +126,7 @@ class GmailToVKbot():
                 ts (integer) — номер последнего события. Используйте его в следующем запросе.
                 updates (array) — массив, элементы которого содержат представление новых событий.
                 '''
-
+                #print(self.longPoll['updates'])
                 if self.longPoll['updates'] and len(
                         self.longPoll['updates']) != 0:
                     for update in self.longPoll['updates']:
@@ -116,13 +143,12 @@ class GmailToVKbot():
                             Помечаем сообщение как прочитанное
                             '''
 
-                            self.vk_api.messages.markAsRead(
-                                peer_id=update['object']['peer_id'])
+                            self.vk_api.messages.markAsRead(peer_id=peer_id)
 
-                            if update['object']['text'] == 'СТАРТ':
+                            if update['object']['text'] == 'Старт':
                                 STOP = False
 
-                            if update['object']['text'] == 'СТОП':
+                            if update['object']['text'] == 'Стоп':
                                 STOP = True
                             '''
                             Остановка бота, выход из while True:
@@ -130,13 +156,20 @@ class GmailToVKbot():
 
                             if update['object']['text'] == 'Остановить':
                                 SERVER = False
+
+                            if update['object']['text'] == 'Выход':
+                                self.gmail_log_out('token.json')
+
+                            if update['object'][
+                                    'text'] == 'Отправляй мне в ЛС':
+                                self.add_to_vk_private_messages(peer_id)
+                                self.vk_api.messages.send(
+                                    peer_id=peer_id, message='Добавлено')
                             '''
                             Отправляем сообщение
                             '''
-
                             self.vk_api.messages.send(
-                                peer_id=update['object']['peer_id'],
-                                message='С новым годом')
+                                peer_id=peer_id, message='С новым годом')
 
                 if peer_id is not None and not STOP:
                     time.sleep(30)
@@ -145,7 +178,7 @@ class GmailToVKbot():
 
                 self.ts = self.longPoll['ts']
             except:
-                print("Error")
+                print("\tError")
                 SERVER = False
 
 

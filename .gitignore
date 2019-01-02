@@ -1,2 +1,2 @@
 *.json
-configuration.py
+*.db
