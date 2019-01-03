@@ -38,8 +38,8 @@ class GmailToVKbot():
             self.server = self.longPoll['server']
             self.key = self.longPoll['key']
             self.ts = self.longPoll['ts']
-        except Exception:
-            print("\tFailed \r\n")
+        except Exception as e:
+            print("\tFailed : +"+str(e)+"\r\n")
         else:
             print("\tSuccessfully \r\n")
 
@@ -77,8 +77,9 @@ class GmailToVKbot():
 
             self.gmail_user = self.gmail_service.users().getProfile(
                 userId='me').execute()['emailAddress']
-        except:
-            print("\tFailed \r\n")
+            
+        except Exception as e:
+            print("\tFailed : +"+str(e)+"\r\n")
         else:
             print("\tSuccessfully")
             print("\t\t User:", self.gmail_user, '\r\n')
@@ -177,8 +178,8 @@ class GmailToVKbot():
                         peer_id=peer_id, message='С новым годом')
 
                 self.ts = self.longPoll['ts']
-            except:
-                print("\tError")
+            except Exception as e:
+                print("\tFailed : +"+str(e)+"\r\n")
                 SERVER = False
 
 
