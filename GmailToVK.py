@@ -1,13 +1,7 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Jan  1 00:04:29 2019
-
-@author: Medvedev Denis
-"""
-
 from configuration import *
 from scopes import *
 from requests import post
+import json
 import time
 import os
 import vk
@@ -39,7 +33,7 @@ class GmailToVKbot():
             self.key = self.longPoll['key']
             self.ts = self.longPoll['ts']
         except Exception as e:
-            print("\tFailed : +"+str(e)+"\r\n")
+            print("\tFailed : +" + str(e) + "\r\n")
         else:
             print("\tSuccessfully \r\n")
 
@@ -76,16 +70,32 @@ class GmailToVKbot():
             '''
 
             self.gmail_user = self.gmail_service.users().getProfile(
-                userId='me').execute()['emailAddress']
-            
+                userId='me').execute()
+            self.historyId = self.gmail_user['historyId']
+            self.last_date = 0
         except Exception as e:
-            print("\tFailed : +"+str(e)+"\r\n")
+            print("\tFailed : +" + str(e) + "\r\n")
         else:
             print("\tSuccessfully")
-            print("\t\t User:", self.gmail_user, '\r\n')
+            print("\t\t User:", self.gmail_user['emailAddress'], '\r\n')
 
     def get_last_message(self, user_id='me'):
-        print('3')
+        self.history = self.gmail_service.users().history().list(
+            userId='me',
+            historyTypes=['messageAdded'],
+            startHistoryId=self.historyId).execute()
+        try:
+            history = self.history['history']
+            for h in history:
+                messages = h['messages']
+                for msg in messages:
+                    self.last_message = self.gmail_service.users().messages(
+                    ).get(
+                        userId='me', id=msg['id']).execute()
+        except Exception as e:
+            print("\tFailed : +" + str(e) + "\r\n")
+            self.last_message = None
+        self.historyId = self.history['historyId']
 
     def gmail_log_out(self, filename):
         print('Start logout')
@@ -151,6 +161,7 @@ class GmailToVKbot():
 
                             if update['object']['text'] == 'Стоп':
                                 STOP = True
+                                self.get_last_message(user_id='me')
                             '''
                             Остановка бота, выход из while True:
                             '''
@@ -171,15 +182,26 @@ class GmailToVKbot():
                             '''
                             self.vk_api.messages.send(
                                 peer_id=peer_id, message='С новым годом')
+                '''
+                Прослушивание gmail
+
+                Письмо хранится в формате json (возможно list) в переменной self.last_message
+                '''
 
                 if peer_id is not None and not STOP:
-                    time.sleep(30)
-                    self.vk_api.messages.send(
-                        peer_id=peer_id, message='С новым годом')
+                    self.get_last_message(user_id='me')
+                    if self.last_message is not None:
+                        self.vk_api.messages.send(
+                            peer_id=peer_id,
+                            message='На почте новое письмо' +
+                            '\r\n\t Краткое содержание: \r\n' +
+                            self.last_message['snippet'])
 
+                    print(self.last_message)
+                    time.sleep(30)
                 self.ts = self.longPoll['ts']
             except Exception as e:
-                print("\tFailed : +"+str(e)+"\r\n")
+                print("\tFailed : +" + str(e) + "\r\n")
                 SERVER = False
 
 
