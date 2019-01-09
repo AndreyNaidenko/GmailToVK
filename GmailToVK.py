@@ -187,7 +187,6 @@ class GmailToVKbot():
 
                 Письмо хранится в формате json (возможно list) в переменной self.last_message
                 '''
-
                 if peer_id is not None and not STOP:
                     self.get_last_message(user_id='me')
                     if self.last_message is not None:
@@ -198,7 +197,6 @@ class GmailToVKbot():
                             self.last_message['snippet'])
 
                     print(self.last_message)
-                    time.sleep(30)
                 self.ts = self.longPoll['ts']
             except Exception as e:
                 print("\tFailed : +" + str(e) + "\r\n")
