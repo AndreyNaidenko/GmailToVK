@@ -190,13 +190,20 @@ class GmailToVKbot():
                 if peer_id is not None and not STOP:
                     self.get_last_message(user_id='me')
                     if self.last_message is not None:
-                        self.vk_api.messages.send(
-                            peer_id=peer_id,
-                            message='На почте новое письмо' +
-                            '\r\n\t Краткое содержание: \r\n' +
-                            self.last_message['snippet'])
+                        # постепенно углубляемся в словарь для получения данных
+                        main_headers = self.last_message['payload']
+                        headers = main_headers['headers']
 
-                    print(self.last_message)
+                        author_dict = headers[14]
+                        author = "Автор: " + author_dict['value'] + "\n" # строка с автором и почтой письма
+
+                        subject_dict = headers[16]
+                        if subject_dict['name'] == 'Subject': # если у письма указана тема
+                            subject = "Тема: " + subject_dict['value'] # формируем строку с темой письма
+                        else:
+                            subject = "" # иначе оставим ее пустой
+                        vk_message = "На почте новое письмо\n" +  author + subject # формируем строку для отправки в вк
+                        self.vk_api.messages.send(peer_id=peer_id, message=vk_message)
                 self.ts = self.longPoll['ts']
             except Exception as e:
                 print("\tFailed : +" + str(e) + "\r\n")
