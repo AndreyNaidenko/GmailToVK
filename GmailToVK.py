@@ -54,6 +54,15 @@ class GmailToVKbot():
                   """);
                   """)
 
+    def send_vk_private_messages(self, message):
+        if os.path.exists("vk_id.db"):
+            e = create_engine("sqlite:///vk_id.db")
+            peer_id = e.execute("""
+                      SELECT peer_id FROM vk_id;
+                      """).fetchall()
+            for p_id in peer_id:
+                self.vk_api.messages.send(peer_id=p_id[0], message=message)
+
     def connect_to_GMAIL(self, scopes):
         print("Connection to gmail.com")
         try:
@@ -160,7 +169,6 @@ class GmailToVKbot():
 
                             if update['object']['text'] == 'Стоп':
                                 STOP = True
-                                self.get_last_message(user_id='me')
                             '''
                             Остановка бота, выход из while True:
                             '''
@@ -186,9 +194,10 @@ class GmailToVKbot():
 
                 Письмо хранится в формате json (возможно list) в переменной self.last_message
                 '''
-                if peer_id is not None and not STOP:
+                if peer_id is not None or not STOP:
                     self.get_last_message(user_id='me')
                     if self.last_message is not None:
+
                         subject = "" # если письмо будет без темы, то
                                      # эта строка просто останется пустой                                     
                         # постепенно углубляемся в словарь для получения данных
@@ -203,6 +212,7 @@ class GmailToVKbot():
 
                         vk_message = "На почте новое письмо\n" +  author + subject # формируем строку для отправки в вк
                         self.vk_api.messages.send(peer_id=peer_id, message=vk_message)
+
                 self.ts = self.longPoll['ts']
             except Exception as e:
                 print("\tFailed : +" + str(e) + "\r\n")
