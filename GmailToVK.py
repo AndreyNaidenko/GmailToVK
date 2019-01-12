@@ -146,6 +146,7 @@ class GmailToVKbot():
                 ts (integer) — номер последнего события. Используйте его в следующем запросе.
                 updates (array) — массив, элементы которого содержат представление новых событий.
                 '''
+              
                 #print(self.longPoll['updates'])
                 if self.longPoll['updates'] and len(
                         self.longPoll['updates']) != 0:
