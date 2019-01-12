@@ -122,7 +122,6 @@ class GmailToVKbot():
         STOP = True
         SERVER = True
         while SERVER:
-
             try:
                 '''
                 POST-запрос вида {$server}?act=a_check&key={$key}&ts={$ts}&wait=25
@@ -198,15 +197,22 @@ class GmailToVKbot():
                 if peer_id is not None or not STOP:
                     self.get_last_message(user_id='me')
                     if self.last_message is not None:
-                        self.vk_api.messages.send(
-                            peer_id=peer_id,
-                            message='На почте новое письмо' +
-                            '\r\n\t Краткое содержание: \r\n' +
-                            self.last_message['snippet'])
-                        
-                        self.send_vk_private_messages(
-                            message="Тут должно быть сообщение")
-                        
+
+                        subject = "" # если письмо будет без темы, то
+                                     # эта строка просто останется пустой                                     
+                        # постепенно углубляемся в словарь для получения данных
+                        main_headers = self.last_message['payload']
+                        headers = main_headers['headers']
+
+                        for item in headers: # цикл по словарям
+                            if item['name'] == 'From': # ищем From - уникальное name с данными автора
+                                author = "Автор: " + item['value'] + "\n" # строка с автором и почтой письма
+                            if item['name'] == 'Subject': # ищем Subject - уникальное name с темой
+                                subject = "Тема: " + item['value'] # формируем строку с темой письма
+
+                        vk_message = "На почте новое письмо\n" +  author + subject # формируем строку для отправки в вк
+                        self.vk_api.messages.send(peer_id=peer_id, message=vk_message)
+
                 self.ts = self.longPoll['ts']
             except Exception as e:
                 print("\tFailed : +" + str(e) + "\r\n")
