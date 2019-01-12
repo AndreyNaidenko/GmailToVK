@@ -113,7 +113,6 @@ class GmailToVKbot():
         STOP = True
         SERVER = True
         while SERVER:
-
             try:
                 '''
                 POST-запрос вида {$server}?act=a_check&key={$key}&ts={$ts}&wait=25
@@ -190,18 +189,18 @@ class GmailToVKbot():
                 if peer_id is not None and not STOP:
                     self.get_last_message(user_id='me')
                     if self.last_message is not None:
+                        subject = "" # если письмо будет без темы, то
+                                     # эта строка просто останется пустой                                     
                         # постепенно углубляемся в словарь для получения данных
                         main_headers = self.last_message['payload']
                         headers = main_headers['headers']
 
-                        author_dict = headers[14]
-                        author = "Автор: " + author_dict['value'] + "\n" # строка с автором и почтой письма
+                        for item in headers: # цикл по словарям
+                            if item['name'] == 'From': # ищем From - уникальное name с данными автора
+                                author = "Автор: " + item['value'] + "\n" # строка с автором и почтой письма
+                            if item['name'] == 'Subject': # ищем Subject - уникальное name с темой
+                                subject = "Тема: " + item['value'] # формируем строку с темой письма
 
-                        subject_dict = headers[16]
-                        if subject_dict['name'] == 'Subject': # если у письма указана тема
-                            subject = "Тема: " + subject_dict['value'] # формируем строку с темой письма
-                        else:
-                            subject = "" # иначе оставим ее пустой
                         vk_message = "На почте новое письмо\n" +  author + subject # формируем строку для отправки в вк
                         self.vk_api.messages.send(peer_id=peer_id, message=vk_message)
                 self.ts = self.longPoll['ts']
