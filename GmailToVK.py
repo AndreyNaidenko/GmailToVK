@@ -41,7 +41,10 @@ class BotGmailToVk():
         if not os.path.exists("vk_id.db"):
             self.create_vk_id_base()
         e = create_engine("sqlite:///vk_id.db")
-        e.execute("INSERT INTO `vk_id`(`peer_id`) VALUES (" + str(peer_id) +  ");")
+        try:
+            e.execute("INSERT INTO `vk_id`(`peer_id`) VALUES (" + str(peer_id) +  ");")
+        except Exception as e:
+            print("\tFailed : +" + str(e) + "\r\n")
 
     def send_vk_private_messages(self, message):
         if os.path.exists("vk_id.db"):
@@ -128,20 +131,36 @@ class BotGmailToVk():
                             peer_id = update['object']['peer_id'] # Получаем id пользователя, отправившего сообщение боту
                             self.vk_api.messages.markAsRead(peer_id=peer_id) # Помечаем сообщение как прочитанное
 
-                            if update['object']['text'] == 'Старт':
+                            if 'старт' in update['object']['text'].lower()::
                                 STOP = False
-                            if update['object']['text'] == 'Стоп':
+                                self.vk_api.messages.send(
+                                    peer_id=peer_id,
+                                    random_id='0',
+                                    message='Бот запущен')
+                            if 'стоп' in update['object']['text'].lower():
                                 STOP = True
-                            if update['object']['text'] == 'Остановить': # Остановка бота, выход из while True:
+                                 self.vk_api.messages.send(
+                                    peer_id=peer_id,
+                                    random_id='0',
+                                    message='Бот остановлен')
+                            if 'остановить' in update['object']['text'].lower(): # Остановка бота, выход из while True:
                                 SERVER = False
-                            if update['object']['text'] == 'Выход':
+                                self.vk_api.messages.send(
+                                    peer_id=peer_id,
+                                    random_id='0',
+                                    message='Остановлено')
+                             if 'выход' in update['object']['text'].lower():
                                 self.gmail_log_out('token.json')
-                            if update['object']['text'] == 'Отправляй мне в ЛС':
+                                self.vk_api.messages.send(
+                                    peer_id=peer_id,
+                                    random_id='0',
+                                    message='Завершено')
+                            if 'отправляй мне в лс' in update['object']['text'].lower():
                                 self.add_to_vk_private_messages(peer_id)
                                 self.vk_api.messages.send(
-                                    peer_id=peer_id, message='Добавлено')
-
-                            self.vk_api.messages.send(peer_id=peer_id, message='С новым годом') # Отправляем сообщение
+                                    peer_id=peer_id,
+                                    random_id='0',
+                                    message='Добавлено')
 
                 if peer_id is not None or not STOP:
                     self.get_last_message(user_id='me')
