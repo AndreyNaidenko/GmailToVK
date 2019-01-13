@@ -129,9 +129,7 @@ class BotGmailToVk():
                     for update in self.longPoll['updates']:
                         if update['type'] == 'message_new': # Событие message_new- входящее сообщение
                             peer_id = update['object']['peer_id'] # Получаем id пользователя, отправившего сообщение боту
-                            self.vk_api.messages.markAsRead(peer_id=peer_id) # Помечаем сообщение как прочитанное
-
-                            if 'старт' in update['object']['text'].lower()::
+                            if 'старт' in update['object']['text'].lower():
                                 STOP = False
                                 self.vk_api.messages.send(
                                     peer_id=peer_id,
@@ -139,7 +137,7 @@ class BotGmailToVk():
                                     message='Бот запущен')
                             if 'стоп' in update['object']['text'].lower():
                                 STOP = True
-                                 self.vk_api.messages.send(
+                                self.vk_api.messages.send(
                                     peer_id=peer_id,
                                     random_id='0',
                                     message='Бот остановлен')
@@ -149,7 +147,7 @@ class BotGmailToVk():
                                     peer_id=peer_id,
                                     random_id='0',
                                     message='Остановлено')
-                             if 'выход' in update['object']['text'].lower():
+                            if 'выход' in update['object']['text'].lower():
                                 self.gmail_log_out('token.json')
                                 self.vk_api.messages.send(
                                     peer_id=peer_id,
@@ -181,8 +179,8 @@ class BotGmailToVk():
 
                         vk_message = "На почте новое письмо\n" +  author + subject # формируем строку для отправки в вк
                         if "INBOX" in self.last_message['labelIds']: # если в ответе на запрос есть метка "INBOX"
-                            self.vk_api.messages.send(peer_id=peer_id, message=vk_message) # отправляем в вк
-
+                            self.vk_api.messages.send(peer_id=VK_CHAT_ID,random_id=0, message=vk_message) # отправляем в вк
+                            self.send_vk_private_messages(vk_message)
                 self.ts = self.longPoll['ts']
             except Exception as e:
                 print("Failed :" + str(e))
