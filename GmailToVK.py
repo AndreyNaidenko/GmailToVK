@@ -49,10 +49,13 @@ class GmailToVKbot():
         if not os.path.exists("vk_id.db"):
             self.create_vk_id_base()
         e = create_engine("sqlite:///vk_id.db")
-        e.execute("""
-                  INSERT INTO `vk_id`(`peer_id`) VALUES (""" + str(peer_id) +
-                  """);
-                  """)
+        try:
+            e.execute("""
+                      INSERT INTO `vk_id`(`peer_id`) VALUES (""" +
+                      str(peer_id) + """);
+                      """)
+        except Exception as e:
+            print("\tFailed : +" + str(e) + "\r\n")
 
     def send_vk_private_messages(self, message):
         if os.path.exists("vk_id.db"):
@@ -61,7 +64,8 @@ class GmailToVKbot():
                       SELECT peer_id FROM vk_id;
                       """).fetchall()
             for p_id in peer_id:
-                self.vk_api.messages.send(peer_id=p_id[0], message=message)
+                self.vk_api.messages.send(
+                    peer_id=p_id[0], random_id='0', message=message)
 
     def connect_to_GMAIL(self, scopes):
         print("Connection to gmail.com")
@@ -93,6 +97,7 @@ class GmailToVKbot():
             userId='me',
             historyTypes=['messageAdded'],
             startHistoryId=self.historyId).execute()
+        print(self.history)
         try:
             history = self.history['history']
             for h in history:
@@ -105,6 +110,7 @@ class GmailToVKbot():
             print("\tFailed : +" + str(e) + "\r\n")
             self.last_message = None
         self.historyId = self.history['historyId']
+        print(self.last_message)
 
     def gmail_log_out(self, filename):
         print('Start logout')
@@ -121,6 +127,7 @@ class GmailToVKbot():
         print('Bot is run')
         STOP = True
         SERVER = True
+
         while SERVER:
             try:
                 '''
@@ -145,7 +152,7 @@ class GmailToVKbot():
                 ts (integer) — номер последнего события. Используйте его в следующем запросе.
                 updates (array) — массив, элементы которого содержат представление новых событий.
                 '''
-                #print(self.longPoll['updates'])
+                print(self.longPoll['updates'])
                 if self.longPoll['updates'] and len(
                         self.longPoll['updates']) != 0:
                     for update in self.longPoll['updates']:
@@ -162,33 +169,43 @@ class GmailToVKbot():
                             Помечаем сообщение как прочитанное
                             '''
 
-                            self.vk_api.messages.markAsRead(peer_id=peer_id)
-
-                            if update['object']['text'] == 'Старт':
+                            if 'старт' in update['object']['text'].lower():
                                 STOP = False
-
-                            if update['object']['text'] == 'Стоп':
+                                self.vk_api.messages.send(
+                                    peer_id=peer_id,
+                                    random_id='0',
+                                    message='Бот запущен')
+                            if 'стоп' in update['object']['text'].lower():
                                 STOP = True
+                                self.vk_api.messages.send(
+                                    peer_id=peer_id,
+                                    random_id='0',
+                                    message='Бот остановлен')
                             '''
                             Остановка бота, выход из while True:
                             '''
 
-                            if update['object']['text'] == 'Остановить':
+                            if 'остановить' in update['object']['text'].lower(
+                            ):
                                 SERVER = False
-
-                            if update['object']['text'] == 'Выход':
+                                self.vk_api.messages.send(
+                                    peer_id=peer_id,
+                                    random_id='0',
+                                    message='Остановлено')
+                            if 'выход' in update['object']['text'].lower():
                                 self.gmail_log_out('token.json')
+                                self.vk_api.messages.send(
+                                    peer_id=peer_id,
+                                    random_id='0',
+                                    message='Завершено')
 
-                            if update['object'][
-                                    'text'] == 'Отправляй мне в ЛС':
+                            if 'отправляй мне в лс' in update['object'][
+                                    'text'].lower():
                                 self.add_to_vk_private_messages(peer_id)
                                 self.vk_api.messages.send(
-                                    peer_id=peer_id, message='Добавлено')
-                            '''
-                            Отправляем сообщение
-                            '''
-                            self.vk_api.messages.send(
-                                peer_id=peer_id, message='С новым годом')
+                                    peer_id=peer_id,
+                                    random_id='0',
+                                    message='Добавлено')
                 '''
                 Прослушивание gmail
 
@@ -198,21 +215,26 @@ class GmailToVKbot():
                     self.get_last_message(user_id='me')
                     if self.last_message is not None:
 
-                        subject = "" # если письмо будет без темы, то
-                                     # эта строка просто останется пустой                                     
+                        subject = ""  # если письмо будет без темы, то
+                        # эта строка просто останется пустой
                         # постепенно углубляемся в словарь для получения данных
                         main_headers = self.last_message['payload']
                         headers = main_headers['headers']
 
-                        for item in headers: # цикл по словарям
-                            if item['name'] == 'From': # ищем From - уникальное name с данными автора
-                                author = "Автор: " + item['value'] + "\n" # строка с автором и почтой письма
-                            if item['name'] == 'Subject': # ищем Subject - уникальное name с темой
-                                subject = "Тема: " + item['value'] # формируем строку с темой письма
+                        for item in headers:  # цикл по словарям
+                            if item['name'] == 'From':  # ищем From - уникальное name с данными автора
+                                author = "Автор: " + item[
+                                    'value'] + "\n"  # строка с автором и почтой письма
+                            if item['name'] == 'Subject':  # ищем Subject - уникальное name с темой
+                                subject = "Тема: " + item[
+                                    'value']  # формируем строку с темой письма
 
-                        vk_message = "На почте новое письмо\n" +  author + subject # формируем строку для отправки в вк
-                        self.vk_api.messages.send(peer_id=peer_id, message=vk_message)
-
+                        vk_message = "На почте новое письмо\n" + author + subject  # формируем строку для отправки в вк
+                        self.vk_api.messages.send(
+                            peer_id=VK_CHAT_ID,
+                            random_id='0',
+                            message=vk_message)
+                        self.send_vk_private_messages(vk_message)
                 self.ts = self.longPoll['ts']
             except Exception as e:
                 print("\tFailed : +" + str(e) + "\r\n")
