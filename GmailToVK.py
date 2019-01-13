@@ -201,9 +201,9 @@ class GmailToVKbot():
 
                             if 'отправляй мне в лс' in update['object'][
                                     'text'].lower():
-                                self.add_to_vk_private_messages(peer_id)
+                                self.add_to_vk_private_messages(update['object']['from_id'])
                                 self.vk_api.messages.send(
-                                    peer_id=peer_id,
+                                    peer_id=update['object']['from_id'],
                                     random_id='0',
                                     message='Добавлено')
                 '''
