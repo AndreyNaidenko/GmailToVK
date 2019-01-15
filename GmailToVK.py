@@ -188,10 +188,26 @@ class BotGmailToVk():
         if "INBOX" in self.last_message[
                 'labelIds']:  # если в ответе на запрос есть метка "INBOX"
             self.vk_api.messages.send(
-                peer_id=VK_CHAT_ID,
-                random_id='0',
+                peer_id=VK_CHAT_ID, random_id='0',
                 message=vk_message)  # отправляем в вк
             self.send_vk_private_messages(vk_message)
+
+    def send_keyboard(self, peer_id):
+        """
+        Отправляет клавиатуру в vk.com
+        
+        Arguments:
+            peer_id {str} -- id пользователя
+        """
+
+        keyboard = str(
+            json.dumps(KEYBOARD, ensure_ascii=False).encode('utf-8'))
+        keyboard = str(keyboard.decode('utf-8'))
+        self.vk_api.messages.send(
+            peer_id=peer_id,
+            message="Клавиатура",
+            random_id='0',
+            keyboard=keyboard)
 
     def run(self):
         """Основная функция."""
@@ -228,6 +244,7 @@ class BotGmailToVk():
                                 'type'] == 'message_new':  # Событие message_new- входящее сообщение
                             peer_id = update['object'][
                                 'peer_id']  # Получаем id пользователя, отправившего сообщение боту
+                            self.send_keyboard(peer_id)
                             if 'старт' in update['object']['text'].lower():
                                 STOP = False
                                 self.vk_api.messages.send(
