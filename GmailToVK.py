@@ -151,6 +151,30 @@ class BotGmailToVk():
         else:
             print('\tLogout completed')
 
+    def send_message_to_vk(self):
+        subject = ""  # если письмо будет без темы, то
+        # эта строка просто останется пустой
+        # постепенно углубляемся в словарь для получения данных
+        main_headers = self.last_message['payload']
+        headers = main_headers['headers']
+
+        for item in headers:  # цикл по словарям
+            if item['name'] == 'From':  # ищем From - уникальное name с данными автора
+                author = "Автор: " + item[
+                    'value'] + "\n"  # строка с автором и почтой письма
+            if item['name'] == 'Subject':  # ищем Subject - уникальное name с темой
+                subject = "Тема: " + item[
+                    'value']  # формируем строку с темой письма
+
+        vk_message = "На почте новое письмо\n" + author + subject  # формируем строку для отправки в вк
+        if "INBOX" in self.last_message[
+                'labelIds']:  # если в ответе на запрос есть метка "INBOX"
+            self.vk_api.messages.send(
+                peer_id=VK_CHAT_ID,
+                random_id='0',
+                message=vk_message)  # отправляем в вк
+        self.send_vk_private_messages(vk_message)
+
     def run(self):
         """Основная функция."""
 
@@ -224,28 +248,7 @@ class BotGmailToVk():
                 if peer_id is not None or not STOP:
                     self.get_last_message(user_id='me')
                     if self.last_message:
-                        subject = ""  # если письмо будет без темы, то
-                        # эта строка просто останется пустой
-                        # постепенно углубляемся в словарь для получения данных
-                        main_headers = self.last_message['payload']
-                        headers = main_headers['headers']
-
-                        for item in headers:  # цикл по словарям
-                            if item['name'] == 'From':  # ищем From - уникальное name с данными автора
-                                author = "Автор: " + item[
-                                    'value'] + "\n"  # строка с автором и почтой письма
-                            if item['name'] == 'Subject':  # ищем Subject - уникальное name с темой
-                                subject = "Тема: " + item[
-                                    'value']  # формируем строку с темой письма
-
-                        vk_message = "На почте новое письмо\n" + author + subject  # формируем строку для отправки в вк
-                        if "INBOX" in self.last_message[
-                                'labelIds']:  # если в ответе на запрос есть метка "INBOX"
-                            self.vk_api.messages.send(
-                                peer_id=VK_CHAT_ID,
-                                random_id='0',
-                                message=vk_message)  # отправляем в вк
-                            self.send_vk_private_messages(vk_message)
+                        self.send_message_to_vk()
                 self.ts = self.longPoll['ts']
             except Exception as e:
                 print("Failed :" + str(e))
