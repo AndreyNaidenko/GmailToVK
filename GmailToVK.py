@@ -191,7 +191,7 @@ class BotGmailToVk():
                 peer_id=VK_CHAT_ID,
                 random_id='0',
                 message=vk_message)  # отправляем в вк
-        self.send_vk_private_messages(vk_message)
+            self.send_vk_private_messages(vk_message)
 
     def run(self):
         """Основная функция."""
