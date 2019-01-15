@@ -200,8 +200,7 @@ class BotGmailToVk():
             peer_id {str} -- id пользователя
         """
 
-        keyboard = str(
-            json.dumps(KEYBOARD, ensure_ascii=False).encode('utf-8'))
+        keyboard = json.dumps(KEYBOARD, ensure_ascii=False).encode('utf-8')
         keyboard = str(keyboard.decode('utf-8'))
         self.vk_api.messages.send(
             peer_id=peer_id,
