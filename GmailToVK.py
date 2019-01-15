@@ -38,8 +38,8 @@ class BotGmailToVk():
     def connect_to_vk_long_poll(self, group_id):
         """Подключение к long poll серверу vk.
 
-        Arguments:     group_id {str} -- Id группы используемой для
-        рассылки
+        Arguments:
+            group_id {str} -- Id группы используемой для рассылки
         """
 
         try:
@@ -60,7 +60,8 @@ class BotGmailToVk():
     def add_to_vk_private_messages(self, peer_id):
         """Добавление id пользователя в базу.
 
-        Arguments:     peer_id {str} -- Id пользователя
+        Arguments:
+            peer_id {str} -- Id пользователя
         """
 
         if not os.path.exists("vk_id.db"):
@@ -72,11 +73,26 @@ class BotGmailToVk():
         except Exception as e:
             print("\tFailed : +" + str(e) + "\r\n")
 
+    def delete_from_vk_private_messages(self, peer_id):
+        """Удаление id пользователя из базы
+        
+        Arguments:
+            peer_id {str} -- id пользователя
+        """
+        if not os.path.exists("vk_id.db"):
+            self.create_vk_id_base()
+        e = create_engine("sqlite:///vk_id.db")
+        try:
+            e.execute("DELETE FROM `vk_id` WHERE `_rowid_` IN ('" +
+                      str(peer_id) + "');")
+        except Exception as e:
+            print("\tFailed : +" + str(e) + "\r\n")
+
     def send_vk_private_messages(self, message):
         """Рассылка сообщений пользователям из базы.
 
-        Arguments:     message {str} -- Сообщение которое будет
-        отправлено пользователям
+        Arguments:
+            message {str} -- Сообщение которое будет отправлено пользователям
         """
 
         if os.path.exists("vk_id.db"):
@@ -89,7 +105,8 @@ class BotGmailToVk():
     def connect_to_gmail(self, scopes):
         """Подключение к gmail.
 
-        Arguments:     scopes {list} -- Области доступа
+        Arguments:
+            scopes {list} -- Области доступа
         """
 
         try:
@@ -115,8 +132,8 @@ class BotGmailToVk():
     def get_last_message(self, user_id='me'):
         """Получение последнего сообщения в gmail.com.
 
-        Keyword Arguments:     user_id {str} -- Id в gmail (default:
-        {'me'})
+        Keyword Arguments:
+            user_id {str} -- Id в gmail (default:{'me'})
         """
 
         self.history = self.gmail_service.users().history().list(
@@ -139,7 +156,8 @@ class BotGmailToVk():
     def gmail_log_out(self, filename):
         """Выход из аккаунта gmail.com.
 
-        Arguments:     filename {str} -- Путь к файлу в котором хранится
+        Arguments:
+            filename {str} -- Путь к файлу в котором хранится
         токен
         """
 
@@ -220,7 +238,14 @@ class BotGmailToVk():
                                     peer_id=update['object']['from_id'],
                                     random_id='0',
                                     message='Добавлено')
-
+                            if 'отменить рассылку в лс' in update['object'][
+                                    'text'].lower():
+                                self.delete_from_vk_private_messages(
+                                    update['object']['from_id'])
+                                self.vk_api.messages.send(
+                                    peer_id=update['object']['from_id'],
+                                    random_id='0',
+                                    message='Удалено')
                 if peer_id is not None or not STOP:
                     self.get_last_message(user_id='me')
                     if self.last_message:
