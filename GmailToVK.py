@@ -55,36 +55,36 @@ class BotGmailToVk():
         """Создание базы sqlite, хранящей id пользователей vk.com."""
 
         e = create_engine("sqlite:///vk_id.db")
-        e.execute("create table vk_id (peer_id integer primary key)")
+        e.execute("create table vk_id (user_id integer primary key)")
 
-    def add_to_vk_private_messages(self, peer_id):
+    def add_to_vk_private_messages(self, user_id):
         """Добавление id пользователя в базу.
 
         Arguments:
-            peer_id {str} -- Id пользователя
+            user_id {integer} -- Id пользователя
         """
 
         if not os.path.exists("vk_id.db"):
             self.create_vk_id_base()
         e = create_engine("sqlite:///vk_id.db")
         try:
-            e.execute("INSERT INTO `vk_id`(`peer_id`) VALUES (" +
-                      str(peer_id) + ");")
+            e.execute("INSERT INTO `vk_id`(`user_id`) VALUES (" +
+                      str(user_id) + ");")
         except Exception as e:
             print("\tFailed : +" + str(e) + "\r\n")
 
-    def delete_from_vk_private_messages(self, peer_id):
+    def delete_from_vk_private_messages(self, user_id):
         """Удаление id пользователя из базы
         
         Arguments:
-            peer_id {str} -- id пользователя
+            user_id {integer} -- id пользователя
         """
         if not os.path.exists("vk_id.db"):
             self.create_vk_id_base()
         e = create_engine("sqlite:///vk_id.db")
         try:
             e.execute("DELETE FROM `vk_id` WHERE `_rowid_` IN ('" +
-                      str(peer_id) + "');")
+                      str(user_id) + "');")
         except Exception as e:
             print("\tFailed : +" + str(e) + "\r\n")
 
@@ -97,10 +97,10 @@ class BotGmailToVk():
 
         if os.path.exists("vk_id.db"):
             e = create_engine("sqlite:///vk_id.db")
-            peer_id = e.execute("SELECT peer_id FROM vk_id;").fetchall()
-            for p_id in peer_id:
+            user_id = e.execute("SELECT user_id FROM vk_id;").fetchall()
+            for u_id in user_id:
                 self.vk_api.messages.send(
-                    peer_id=p_id[0], random_id='0', message=message)
+                    peer_id=u_id[0], random_id='0', message=message)
 
     def connect_to_gmail(self, scopes):
         """Подключение к gmail.
@@ -192,21 +192,38 @@ class BotGmailToVk():
                 message=vk_message)  # отправляем в вк
             self.send_vk_private_messages(vk_message)
 
-    def send_keyboard(self, peer_id):
+    def send_keyboard(self, user_id, peer_id):
         """
         Отправляет клавиатуру в vk.com
         
         Arguments:
-            peer_id {str} -- id пользователя
+            user_id {integer} -- id пользователя
         """
+        if not os.path.exists("vk_id.db"):
+            self.create_vk_id_base()
+        e = create_engine("sqlite:///vk_id.db")
+        User_id = e.execute("SELECT user_id FROM vk_id;").fetchall()
+        check = False
+        #Проверяем есть ли пользователь в базе
+        for p_id in User_id:
+            if str(p_id[0]) == str(user_id):
+                check = True
+        #Если да, то отправляем ему кнопку "Удалить из рассылки"
+        #Если нет, то отправляем ему кнопку "Добавить рассылку в ЛС"
+        if check:
+            KEYBOARD = DELETE_KEYBOARD
+        else:
+            KEYBOARD = ADD_KEYBOARD
 
         keyboard = json.dumps(KEYBOARD, ensure_ascii=False).encode('utf-8')
         keyboard = str(keyboard.decode('utf-8'))
+        #Проверяем откуда пришло сообщение ЛС или беседа
+        if user_id == peer_id:
+            id = user_id
+        else:
+            id = peer_id
         self.vk_api.messages.send(
-            peer_id=peer_id,
-            message="Клавиатура",
-            random_id='0',
-            keyboard=keyboard)
+            peer_id=id, message="Клавиатура", random_id='0', keyboard=keyboard)
 
     def run(self):
         """Основная функция."""
@@ -239,11 +256,12 @@ class BotGmailToVk():
                 if self.longPoll['updates'] and len(
                         self.longPoll['updates']) != 0:
                     for update in self.longPoll['updates']:
+
                         if update[
                                 'type'] == 'message_new':  # Событие message_new- входящее сообщение
                             peer_id = update['object'][
                                 'peer_id']  # Получаем id пользователя, отправившего сообщение боту
-                            self.send_keyboard(peer_id)
+                            from_id = update['object']['from_id']
                             if 'старт' in update['object']['text'].lower():
                                 STOP = False
                                 self.vk_api.messages.send(
@@ -270,7 +288,7 @@ class BotGmailToVk():
                                     random_id='0',
                                     message='Завершено')
 
-                            if 'отправляй мне в лс' in update['object'][
+                            if 'добавить рассылку в лс' in update['object'][
                                     'text'].lower():
                                 self.add_to_vk_private_messages(
                                     update['object']['from_id'])
@@ -278,7 +296,7 @@ class BotGmailToVk():
                                     peer_id=update['object']['from_id'],
                                     random_id='0',
                                     message='Добавлено')
-                            if 'отменить рассылку в лс' in update['object'][
+                            if 'удалить из рассылки' in update['object'][
                                     'text'].lower():
                                 self.delete_from_vk_private_messages(
                                     update['object']['from_id'])
@@ -286,6 +304,8 @@ class BotGmailToVk():
                                     peer_id=update['object']['from_id'],
                                     random_id='0',
                                     message='Удалено')
+                            if 'помощь' in update['object']['text'].lower():
+                                self.send_keyboard(from_id, peer_id)
                 if peer_id is not None or not STOP:
                     self.get_last_message(user_id='me')
                     if self.last_message:
