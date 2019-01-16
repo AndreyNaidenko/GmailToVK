@@ -1,1 +1,1 @@
-web: python GmailToVK.py $PORT
+web: gunicorn gettingstarted.wsgi --log-file -
