@@ -54,7 +54,7 @@ class BotGmailToVk():
             print("Error with connect to vk longPoll: " + str(e))
 
     def connection_to_postgre(self):
-        url = urlparse.urlparse(os.environ['DATABASE_URL'])        
+        url = urlparse.urlparse(os.environ['DATABASE_URL'])
         self.dbname = url.path[1:]
         user = url.username
         password = url.password
@@ -62,19 +62,19 @@ class BotGmailToVk():
         port = url.port
 
         conn = psycopg2.connect(
-                dbname=self.dbname,
-                user=user,
-                password=password,
-                host=host,
-                port=port
-                )
+            dbname=self.dbname,
+            user=user,
+            password=password,
+            host=host,
+            port=port
+        )
         conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
         cursor = conn.cursor()
         return conn, cursor
 
     def create_vk_id_table(self):
         """Создание базы postgesql, хранящей id пользователей vk.com."""
-        
+
         conn, cursor = self.connection_to_postgre()
         try:
             cursor.execute("create table vk_id (user_id integer primary key)")
@@ -89,11 +89,11 @@ class BotGmailToVk():
         Arguments:
             user_id {integer} -- Id пользователя
         """
-        
-        conn, cursor = self.connection_to_postgre()        
+
+        conn, cursor = self.connection_to_postgre()
         try:
             cursor.execute("INSERT INTO vk_id (user_id) VALUES (" +
-                      str(user_id) + ");")
+                           str(user_id) + ");")
         except Exception as e:
             print("Error with command INSERT INTO: " + str(e))
         cursor.close()
@@ -106,14 +106,14 @@ class BotGmailToVk():
             user_id {integer} -- id пользователя
         """
 
-        conn, cursor = self.connection_to_postgre()        
+        conn, cursor = self.connection_to_postgre()
         try:
             cursor.execute("DELETE FROM vk_id WHERE user_id = " +
-                      str(user_id) + ";")
+                           str(user_id) + ";")
         except Exception as e:
             print("Error with command DELETE FROM: " + str(e))
         cursor.close()
-        conn.close()        
+        conn.close()
 
     def send_vk_private_messages(self, message):
         """Рассылка сообщений пользователям из базы.
@@ -122,7 +122,7 @@ class BotGmailToVk():
             message {str} -- Сообщение которое будет отправлено пользователям
         """
 
-        conn, cursor = self.connection_to_postgre()        
+        conn, cursor = self.connection_to_postgre()
         try:
             cursor.execute("SELECT user_id FROM vk_id;")
             users = cursor.fetchall()
@@ -132,7 +132,7 @@ class BotGmailToVk():
             self.vk_api.messages.send(
                 peer_id=user[0], random_id='0', message=message)
         cursor.close()
-        conn.close() 
+        conn.close()
 
     def send_keyboard(self, user_id, peer_id):
         """
@@ -152,7 +152,7 @@ class BotGmailToVk():
         # Проверяем есть ли пользователь в базе
         for user in users:
             if str(user[0]) == str(user_id):
-                check = True        
+                check = True
         # Если да, то отправляем ему кнопку "Удалить из рассылки"
         # Если нет, то отправляем ему кнопку "Добавить рассылку в ЛС"
         if check:
@@ -170,8 +170,7 @@ class BotGmailToVk():
         self.vk_api.messages.send(
             peer_id=id, message="Клавиатура", random_id='0', keyboard=keyboard)
         cursor.close()
-        conn.close() 
-
+        conn.close()
 
     def connect_to_gmail(self, scopes):
         """Подключение к gmail.
@@ -206,12 +205,12 @@ class BotGmailToVk():
         Keyword Arguments:
             user_id {str} -- Id в gmail (default:{'me'})
         """
-
-        self.history = self.gmail_service.users().history().list(
-            userId='me',
-            historyTypes=['messageAdded'],
-            startHistoryId=self.historyId).execute()
         try:
+            self.history = self.gmail_service.users().history().list(
+                userId='me',
+                historyTypes=['messageAdded'],
+                startHistoryId=self.historyId).execute()
+
             history = self.history['history']
             for h in history:
                 messages = h['messages']
@@ -219,10 +218,10 @@ class BotGmailToVk():
                     self.last_message = self.gmail_service.users().messages(
                     ).get(
                         userId='me', id=message['id']).execute()
+            self.historyId = self.history['historyId']
         except Exception as e:
             print("Error with get last message: " + str(e))
             self.last_message = None
-        self.historyId = self.history['historyId']
 
     def gmail_log_out(self, filename):
         """Выход из аккаунта gmail.com.
@@ -257,7 +256,8 @@ class BotGmailToVk():
                 subject = "Тема: " + header[
                     'value']  # формируем строку с темой письма
 
-        vk_message = "На почте новое письмо\n" + author + subject  # формируем строку для отправки в вк
+        vk_message = "На почте новое письмо\n" + author + \
+            subject  # формируем строку для отправки в вк
         if "INBOX" in self.last_message[
                 'labelIds']:  # если в ответе на запрос есть метка "INBOX"
             self.vk_api.messages.send(
@@ -269,16 +269,16 @@ class BotGmailToVk():
         """Основная функция."""
 
         peer_id = None
-        STOP = True
+        STOP = False
         SERVER = True
-        while SERVER:  
+        while SERVER:
 
-        # POST-запрос вида {$server}?act=a_check&key={$key}&ts={$ts}&wait=25
-        # -key — секретный ключ сессии;
-        # -server — адрес сервера;
-        # -ts — номер последнего события, начиная с которого нужно получать данные;
-        # -wait — время ожидания (так как некоторые прокси-серверы обрывают соединение после 30 секунд, мы рекомендуем указывать wait=25). Максимальное значение — 90.
-            try:    
+            # POST-запрос вида {$server}?act=a_check&key={$key}&ts={$ts}&wait=25
+            # -key — секретный ключ сессии;
+            # -server — адрес сервера;
+            # -ts — номер последнего события, начиная с которого нужно получать данные;
+            # -wait — время ожидания (так как некоторые прокси-серверы обрывают соединение после 30 секунд, мы рекомендуем указывать wait=25). Максимальное значение — 90.
+            try:
                 self.longPoll = post(
                     '%s' % self.server,
                     data={
@@ -299,10 +299,10 @@ class BotGmailToVk():
                         self.longPoll['updates']) != 0:
                     for update in self.longPoll['updates']:
                         # Событие message_new- входящее сообщение
-                        if update['type'] == 'message_new':  
+                        if update['type'] == 'message_new':
                             # Получаем id пользователя, отправившего сообщение боту
-                            peer_id = update['object']['peer_id']  
-                            from_id = update['object']['from_id']                            
+                            peer_id = update['object']['peer_id']
+                            from_id = update['object']['from_id']
                             if 'старт' in update['object']['text'].lower():
                                 STOP = False
                                 self.vk_api.messages.send(
@@ -316,7 +316,7 @@ class BotGmailToVk():
                                     random_id='0',
                                     message='Бот остановлен')
                             # Остановка бота, выход из while True:
-                            if 'остановить' in update['object']['text'].lower():  
+                            if 'остановить' in update['object']['text'].lower():
                                 SERVER = False
                                 self.vk_api.messages.send(
                                     peer_id=peer_id,
@@ -346,11 +346,10 @@ class BotGmailToVk():
                                     message='Удалено')
                             if 'помощь' in update['object']['text'].lower():
                                 self.send_keyboard(from_id, peer_id)
-                                STOP = False
             except Exception as e:
                 print("Error in run: " + str(e))
-                SERVER = False                                
-            try:                            
+                SERVER = False
+            try:
                 if not STOP:
                     self.get_last_message(user_id='me')
                     print(self.last_message)
