@@ -1,3 +1,4 @@
+ # -*- coding: utf-8 -*-
 from configuration import *
 from scopes import *
 from requests import post
@@ -8,7 +9,9 @@ import vk
 from googleapiclient.discovery import build
 from httplib2 import Http
 from oauth2client import file, client, tools
-from sqlalchemy import create_engine
+import psycopg2
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+import urllib.parse as urlparse
 
 
 class BotGmailToVk():
@@ -49,13 +52,37 @@ class BotGmailToVk():
             self.key = self.longPoll['key']
             self.ts = self.longPoll['ts']
         except Exception as e:
-            print("Failed :" + str(e))
+            print("Error with connect to vk longPoll: " + str(e))
 
-    def create_vk_id_base(self):
-        """Создание базы sqlite, хранящей id пользователей vk.com."""
+    def connection_to_postgre(self):
+        url = urlparse.urlparse(os.environ['DATABASE_URL'])
+        self.dbname = url.path[1:]
+        user = url.username
+        password = url.password
+        host = url.hostname
+        port = url.port
 
-        e = create_engine("sqlite:///vk_id.db")
-        e.execute("create table vk_id (user_id integer primary key)")
+        conn = psycopg2.connect(
+            dbname=self.dbname,
+            user=user,
+            password=password,
+            host=host,
+            port=port
+        )
+        conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+        cursor = conn.cursor()
+        return conn, cursor
+
+    def create_vk_id_table(self):
+        """Создание базы postgesql, хранящей id пользователей vk.com."""
+
+        conn, cursor = self.connection_to_postgre()
+        try:
+            cursor.execute("create table vk_id (user_id integer primary key)")
+        except Exception as e:
+            print("Error with CREATE TABLE: " + str(e))
+        cursor.close()
+        conn.close()
 
     def add_to_vk_private_messages(self, user_id):
         """Добавление id пользователя в базу.
@@ -64,29 +91,30 @@ class BotGmailToVk():
             user_id {integer} -- Id пользователя
         """
 
-        if not os.path.exists("vk_id.db"):
-            self.create_vk_id_base()
-        e = create_engine("sqlite:///vk_id.db")
+        conn, cursor = self.connection_to_postgre()
         try:
-            e.execute("INSERT INTO `vk_id`(`user_id`) VALUES (" +
-                      str(user_id) + ");")
+            cursor.execute("INSERT INTO vk_id (user_id) VALUES (" +
+                           str(user_id) + ");")
         except Exception as e:
-            print("\tFailed : +" + str(e) + "\r\n")
+            print("Error with command INSERT INTO: " + str(e))
+        cursor.close()
+        conn.close()
 
     def delete_from_vk_private_messages(self, user_id):
         """Удаление id пользователя из базы
-        
+
         Arguments:
             user_id {integer} -- id пользователя
         """
-        if not os.path.exists("vk_id.db"):
-            self.create_vk_id_base()
-        e = create_engine("sqlite:///vk_id.db")
+
+        conn, cursor = self.connection_to_postgre()
         try:
-            e.execute("DELETE FROM `vk_id` WHERE `_rowid_` IN ('" +
-                      str(user_id) + "');")
+            cursor.execute("DELETE FROM vk_id WHERE user_id = " +
+                           str(user_id) + ";")
         except Exception as e:
-            print("\tFailed : +" + str(e) + "\r\n")
+            print("Error with command DELETE FROM: " + str(e))
+        cursor.close()
+        conn.close()
 
     def send_vk_private_messages(self, message):
         """Рассылка сообщений пользователям из базы.
@@ -95,12 +123,51 @@ class BotGmailToVk():
             message {str} -- Сообщение которое будет отправлено пользователям
         """
 
-        if os.path.exists("vk_id.db"):
-            e = create_engine("sqlite:///vk_id.db")
-            user_id = e.execute("SELECT user_id FROM vk_id;").fetchall()
-            for u_id in user_id:
-                self.vk_api.messages.send(
-                    peer_id=u_id[0], random_id='0', message=message)
+        conn, cursor = self.connection_to_postgre()
+        try:
+            cursor.execute("SELECT user_id FROM vk_id;")
+            users = cursor.fetchall()
+        except Exception as e:
+            print("Error with command SELECT: " + str(e))
+        for user in users:
+            self.vk_api.messages.send(
+                peer_id=user[0], random_id='0', message=message)
+        cursor.close()
+        conn.close()
+
+    def send_keyboard(self, user_id, peer_id):
+        """
+        Отправляет клавиатуру в vk.com
+
+        Arguments:
+            user_id {integer} -- id пользователя
+        """
+
+        conn, cursor = self.connection_to_postgre()
+        try:
+            cursor.execute("SELECT user_id FROM vk_id;")
+            users = cursor.fetchall()
+        except Exception as e:
+            print("Error with command SELECT: " + str(e))
+        check = False
+        # Проверяем есть ли пользователь в базе
+        for user in users:
+            if str(user[0]) == str(user_id):
+                check = True
+        # Если да, то отправляем ему кнопку "Удалить из рассылки"
+        # Если нет, то отправляем ему кнопку "Добавить рассылку в ЛС"
+        if check:
+            KEYBOARD = DELETE_KEYBOARD
+        else:
+            KEYBOARD = ADD_KEYBOARD
+
+        keyboard = json.dumps(KEYBOARD, ensure_ascii=False).encode('utf-8')
+        keyboard = str(keyboard.decode('utf-8'))
+        # Проверяем откуда пришло сообщение ЛС или беседа
+        self.vk_api.messages.send(
+            peer_id=user_id, message="Клавиатура", random_id='0', keyboard=keyboard)
+        cursor.close()
+        conn.close()
 
     def connect_to_gmail(self, scopes):
         """Подключение к gmail.
@@ -113,7 +180,7 @@ class BotGmailToVk():
             store = file.Storage('token.json')
             creds = store.get()
             if not creds or creds.invalid:
-                flow = client.flow_from_clientsecrets('client_secret.json',
+                flow = client.flow_from_clientsecrets('client_id.json',
                                                       scopes)
                 creds = tools.run_flow(flow, store)
             self.gmail_service = build(
@@ -125,9 +192,9 @@ class BotGmailToVk():
             self.historyId = self.gmail_user['historyId']
             self.last_date = 0
         except Exception as e:
-            print("\tFailed : +" + str(e) + "\r\n")
+            print("Error with connection to gmail: " + str(e))
         else:
-            print("User:", self.gmail_user['emailAddress'], '\r\n')
+            print("E-mail:", self.gmail_user['emailAddress'])
 
     def get_last_message(self, user_id='me'):
         """Получение последнего сообщения в gmail.com.
@@ -135,12 +202,12 @@ class BotGmailToVk():
         Keyword Arguments:
             user_id {str} -- Id в gmail (default:{'me'})
         """
-
-        self.history = self.gmail_service.users().history().list(
-            userId='me',
-            historyTypes=['messageAdded'],
-            startHistoryId=self.historyId).execute()
         try:
+            self.history = self.gmail_service.users().history().list(
+                userId='me',
+                historyTypes=['messageAdded'],
+                startHistoryId=self.historyId).execute()
+
             history = self.history['history']
             for h in history:
                 messages = h['messages']
@@ -148,10 +215,10 @@ class BotGmailToVk():
                     self.last_message = self.gmail_service.users().messages(
                     ).get(
                         userId='me', id=message['id']).execute()
+            self.historyId = self.history['historyId']
         except Exception as e:
-            print("Failed :" + str(e))
+            print("Error with get last message: " + str(e))
             self.last_message = None
-        self.historyId = self.history['historyId']
 
     def gmail_log_out(self, filename):
         """Выход из аккаунта gmail.com.
@@ -170,21 +237,24 @@ class BotGmailToVk():
             print('\tLogout completed')
 
     def send_message_to_vk(self):
+        '''Отправка сообщения в vk'''
+
         subject = ""  # если письмо будет без темы, то
         # эта строка просто останется пустой
         # постепенно углубляемся в словарь для получения данных
         main_headers = self.last_message['payload']
         headers = main_headers['headers']
 
-        for item in headers:  # цикл по словарям
-            if item['name'] == 'From':  # ищем From - уникальное name с данными автора
-                author = "Автор: " + item[
+        for header in headers:  # цикл по словарям
+            if header['name'] == 'From':  # ищем From - уникальное name с данными автора
+                author = "Автор: " + header[
                     'value'] + "\n"  # строка с автором и почтой письма
-            if item['name'] == 'Subject':  # ищем Subject - уникальное name с темой
-                subject = "Тема: " + item[
+            if header['name'] == 'Subject':  # ищем Subject - уникальное name с темой
+                subject = "Тема: " + header[
                     'value']  # формируем строку с темой письма
 
-        vk_message = "На почте новое письмо\n" + author + subject  # формируем строку для отправки в вк
+        vk_message = "На почте новое письмо\n" + author + \
+            subject  # формируем строку для отправки в вк
         if "INBOX" in self.last_message[
                 'labelIds']:  # если в ответе на запрос есть метка "INBOX"
             self.vk_api.messages.send(
@@ -192,54 +262,20 @@ class BotGmailToVk():
                 message=vk_message)  # отправляем в вк
             self.send_vk_private_messages(vk_message)
 
-    def send_keyboard(self, user_id, peer_id):
-        """
-        Отправляет клавиатуру в vk.com
-        
-        Arguments:
-            user_id {integer} -- id пользователя
-        """
-        if not os.path.exists("vk_id.db"):
-            self.create_vk_id_base()
-        e = create_engine("sqlite:///vk_id.db")
-        User_id = e.execute("SELECT user_id FROM vk_id;").fetchall()
-        check = False
-        #Проверяем есть ли пользователь в базе
-        for p_id in User_id:
-            if str(p_id[0]) == str(user_id):
-                check = True
-        #Если да, то отправляем ему кнопку "Удалить из рассылки"
-        #Если нет, то отправляем ему кнопку "Добавить рассылку в ЛС"
-        if check:
-            KEYBOARD = DELETE_KEYBOARD
-        else:
-            KEYBOARD = ADD_KEYBOARD
-
-        keyboard = json.dumps(KEYBOARD, ensure_ascii=False).encode('utf-8')
-        keyboard = str(keyboard.decode('utf-8'))
-        #Проверяем откуда пришло сообщение ЛС или беседа
-        if user_id == peer_id:
-            id = user_id
-        else:
-            id = peer_id
-        self.vk_api.messages.send(
-            peer_id=id, message="Клавиатура", random_id='0', keyboard=keyboard)
-
     def run(self):
         """Основная функция."""
 
         peer_id = None
-        STOP = True
+        STOP = False
         SERVER = True
         while SERVER:
+
+            # POST-запрос вида {$server}?act=a_check&key={$key}&ts={$ts}&wait=25
+            # -key — секретный ключ сессии;
+            # -server — адрес сервера;
+            # -ts — номер последнего события, начиная с которого нужно получать данные;
+            # -wait — время ожидания (так как некоторые прокси-серверы обрывают соединение после 30 секунд, мы рекомендуем указывать wait=25). Максимальное значение — 90.
             try:
-
-                #POST-запрос вида {$server}?act=a_check&key={$key}&ts={$ts}&wait=25
-                #-key — секретный ключ сессии;
-                #-server — адрес сервера;
-                #-ts — номер последнего события, начиная с которого нужно получать данные;
-                #-wait — время ожидания (так как некоторые прокси-серверы обрывают соединение после 30 секунд, мы рекомендуем указывать wait=25). Максимальное значение — 90.
-
                 self.longPoll = post(
                     '%s' % self.server,
                     data={
@@ -249,46 +285,22 @@ class BotGmailToVk():
                         'wait': 25
                     }).json()
 
-                #JSON-объект в ответе содержит два поля:
-                #ts (integer) — номер последнего события. Используйте его в следующем запросе.
-                #updates (array) — массив, элементы которого содержат представление новых событий.
-
+                # JSON-объект в ответе содержит два поля:
+                # ts (integer) — номер последнего события. Используйте его в следующем запросе.
+                # updates (array) — массив, элементы которого содержат представление новых событий.
+            except Exception as e:
+                print("Error with longPoll post: " + str(e))
+                SERVER = False
+            try:
                 if self.longPoll['updates'] and len(
                         self.longPoll['updates']) != 0:
                     for update in self.longPoll['updates']:
-
-                        if update[
-                                'type'] == 'message_new':  # Событие message_new- входящее сообщение
-                            peer_id = update['object'][
-                                'peer_id']  # Получаем id пользователя, отправившего сообщение боту
-                            from_id = update['object']['from_id']
-                            if 'старт' in update['object']['text'].lower():
-                                STOP = False
-                                self.vk_api.messages.send(
-                                    peer_id=peer_id,
-                                    random_id='0',
-                                    message='Бот запущен')
-                            if 'стоп' in update['object']['text'].lower():
-                                STOP = True
-                                self.vk_api.messages.send(
-                                    peer_id=peer_id,
-                                    random_id='0',
-                                    message='Бот остановлен')
-                            if 'остановить' in update['object']['text'].lower(
-                            ):  # Остановка бота, выход из while True:
-                                SERVER = False
-                                self.vk_api.messages.send(
-                                    peer_id=peer_id,
-                                    random_id='0',
-                                    message='Остановлено')
-                            if 'выход' in update['object']['text'].lower():
-                                self.gmail_log_out('token.json')
-                                self.vk_api.messages.send(
-                                    peer_id=peer_id,
-                                    random_id='0',
-                                    message='Завершено')
-
-                            if 'добавить рассылку в лс' in update['object'][
+                        # Событие message_new- входящее сообщение
+                        if update['type'] == 'message_new':
+                            # Получаем id пользователя, отправившего сообщение боту
+                            peer_id = update['object']['peer_id']
+                            from_id = update['object']['from_id']                            
+                            if 'уведомлять меня лично' in update['object'][
                                     'text'].lower():
                                 self.add_to_vk_private_messages(
                                     update['object']['from_id'])
@@ -296,7 +308,7 @@ class BotGmailToVk():
                                     peer_id=update['object']['from_id'],
                                     random_id='0',
                                     message='Добавлено')
-                            if 'удалить из рассылки' in update['object'][
+                            if 'прекратить личные уведомления' in update['object'][
                                     'text'].lower():
                                 self.delete_from_vk_private_messages(
                                     update['object']['from_id'])
@@ -304,15 +316,20 @@ class BotGmailToVk():
                                     peer_id=update['object']['from_id'],
                                     random_id='0',
                                     message='Удалено')
-                            if 'помощь' in update['object']['text'].lower():
+                            if 'рассылка' in update['object']['text'].lower():
                                 self.send_keyboard(from_id, peer_id)
-                if peer_id is not None or not STOP:
+            except Exception as e:
+                print("Error in run: " + str(e))
+                SERVER = False
+            try:
+                if not STOP:
                     self.get_last_message(user_id='me')
+                    print(self.last_message)
                     if self.last_message:
                         self.send_message_to_vk()
                 self.ts = self.longPoll['ts']
             except Exception as e:
-                print("Failed :" + str(e))
+                print("Error with send message to vk: " + str(e))
                 SERVER = False
 
 
