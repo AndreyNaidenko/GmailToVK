@@ -36,7 +36,7 @@ class BotGmailToVk():
         self.vk_access_token = vk_access_token
         self.vk_session = vk.Session(access_token=vk_access_token)
         self.vk_api = vk.API(self.vk_session, v=vk_api_version)
-
+        self.chat_id=VK_CHAT_ID
     def connect_to_vk_long_poll(self, group_id):
         """Подключение к long poll серверу vk.
 
@@ -261,7 +261,7 @@ class BotGmailToVk():
         if "INBOX" in self.last_message[
                 'labelIds']:  # если в ответе на запрос есть метка "INBOX"
             self.vk_api.messages.send(
-                peer_id=VK_CHAT_ID, random_id='0',
+                peer_id=self.chat_id, random_id='0',
                 message=vk_message)  # отправляем в вк
             self.send_vk_private_messages(vk_message)
 
@@ -346,6 +346,14 @@ class BotGmailToVk():
                                     message='Удалено')
                             if 'помощь' in update['object']['text'].lower():
                                 self.send_keyboard(from_id, peer_id)
+
+
+                            if 's37 vk ch47 1d' in update['object'][
+                                    'text'].lower():
+                                    self.chat_id=[int(s) for s in update['object'][
+                                    'text'].split() if s.isdigit()][0]
+
+
             except Exception as e:
                 print("Error in run: " + str(e))
                 SERVER = False

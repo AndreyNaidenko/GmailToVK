@@ -1,5 +1,7 @@
- # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 from configuration import *
+from admin import *
+from logs import *
 from scopes import *
 from requests import post
 import json
@@ -37,6 +39,9 @@ class BotGmailToVk():
         self.vk_access_token = vk_access_token
         self.vk_session = vk.Session(access_token=vk_access_token)
         self.vk_api = vk.API(self.vk_session, v=vk_api_version)
+        self.configs = Configs()
+        self.logs = Logs()
+        self.admin = Admins()
 
     def connect_to_vk_long_poll(self, group_id):
         """Подключение к long poll серверу vk.
@@ -52,7 +57,9 @@ class BotGmailToVk():
             self.key = self.longPoll['key']
             self.ts = self.longPoll['ts']
         except Exception as e:
-            print("Error with connect to vk longPoll: " + str(e))
+            err = "Error with connect to vk longPoll: " + str(e)
+            print(err)
+            self.logs.add(err)
 
     def connection_to_postgre(self):
         url = urlparse.urlparse(os.environ['DATABASE_URL'])
@@ -67,8 +74,7 @@ class BotGmailToVk():
             user=user,
             password=password,
             host=host,
-            port=port
-        )
+            port=port)
         conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
         cursor = conn.cursor()
         return conn, cursor
@@ -80,7 +86,9 @@ class BotGmailToVk():
         try:
             cursor.execute("create table vk_id (user_id integer primary key)")
         except Exception as e:
-            print("Error with CREATE TABLE: " + str(e))
+            err = "Error with CREATE TABLE: " + str(e)
+            print(err)
+            self.logs.add(err)
         cursor.close()
         conn.close()
 
@@ -96,7 +104,9 @@ class BotGmailToVk():
             cursor.execute("INSERT INTO vk_id (user_id) VALUES (" +
                            str(user_id) + ");")
         except Exception as e:
-            print("Error with command INSERT INTO: " + str(e))
+            err = "Error with command INSERT INTO: " + str(e)
+            print(err)
+            self.logs.add(err)
         cursor.close()
         conn.close()
 
@@ -112,11 +122,13 @@ class BotGmailToVk():
             cursor.execute("DELETE FROM vk_id WHERE user_id = " +
                            str(user_id) + ";")
         except Exception as e:
-            print("Error with command DELETE FROM: " + str(e))
+            err = "Error with command DELETE FROM: " + str(e)
+            print(err)
+            self.logs.add(err)
         cursor.close()
         conn.close()
 
-    def send_vk_private_messages(self, message):
+    def send_vk_private_messages(self, message, table_name):
         """Рассылка сообщений пользователям из базы.
 
         Arguments:
@@ -125,17 +137,19 @@ class BotGmailToVk():
 
         conn, cursor = self.connection_to_postgre()
         try:
-            cursor.execute("SELECT user_id FROM vk_id;")
+            cursor.execute("SELECT user_id FROM" + table_name + ";")
             users = cursor.fetchall()
         except Exception as e:
-            print("Error with command SELECT: " + str(e))
+            err = "Error with command SELECT: " + str(e)
+            print(err)
+            self.logs.add(err)
         for user in users:
             self.vk_api.messages.send(
                 peer_id=user[0], random_id='0', message=message)
         cursor.close()
         conn.close()
 
-    def send_keyboard(self, user_id, peer_id):
+    def send_keyboard(self, user_id):
         """
         Отправляет клавиатуру в vk.com
 
@@ -148,7 +162,9 @@ class BotGmailToVk():
             cursor.execute("SELECT user_id FROM vk_id;")
             users = cursor.fetchall()
         except Exception as e:
-            print("Error with command SELECT: " + str(e))
+            err = "Error with command SELECT: " + str(e)
+            print(err)
+            self.logs.add(err)
         check = False
         # Проверяем есть ли пользователь в базе
         for user in users:
@@ -157,15 +173,18 @@ class BotGmailToVk():
         # Если да, то отправляем ему кнопку "Удалить из рассылки"
         # Если нет, то отправляем ему кнопку "Добавить рассылку в ЛС"
         if check:
-            KEYBOARD = DELETE_KEYBOARD
+            KEYBOARD = self.configs.getKeyBoard('delete')
         else:
-            KEYBOARD = ADD_KEYBOARD
+            KEYBOARD = self.configs.getKeyBoard('add')
 
         keyboard = json.dumps(KEYBOARD, ensure_ascii=False).encode('utf-8')
         keyboard = str(keyboard.decode('utf-8'))
         # Проверяем откуда пришло сообщение ЛС или беседа
         self.vk_api.messages.send(
-            peer_id=user_id, message="Клавиатура", random_id='0', keyboard=keyboard)
+            peer_id=user_id,
+            message="Клавиатура",
+            random_id='0',
+            keyboard=keyboard)
         cursor.close()
         conn.close()
 
@@ -180,8 +199,7 @@ class BotGmailToVk():
             store = file.Storage('token.json')
             creds = store.get()
             if not creds or creds.invalid:
-                flow = client.flow_from_clientsecrets('client_id.json',
-                                                      scopes)
+                flow = client.flow_from_clientsecrets('client_id.json', scopes)
                 creds = tools.run_flow(flow, store)
             self.gmail_service = build(
                 'gmail', 'v1', http=creds.authorize(Http()))
@@ -192,7 +210,9 @@ class BotGmailToVk():
             self.historyId = self.gmail_user['historyId']
             self.last_date = 0
         except Exception as e:
-            print("Error with connection to gmail: " + str(e))
+            err = "Error with connection to gmail: " + str(e)
+            print(err)
+            self.logs.add(err)
         else:
             print("E-mail:", self.gmail_user['emailAddress'])
 
@@ -217,7 +237,9 @@ class BotGmailToVk():
                         userId='me', id=message['id']).execute()
             self.historyId = self.history['historyId']
         except Exception as e:
-            print("Error with get last message: " + str(e))
+            err = "Error with get last message: " + str(e)
+            print(err)
+            self.logs.add(err)
             self.last_message = None
 
     def gmail_log_out(self, filename):
@@ -231,8 +253,9 @@ class BotGmailToVk():
         try:
             os.remove(filename)
         except:
-            print('\tLogout failed')
-            print('\t' + filename + 'is not exist!')
+            err = '\tLogout failed' + '\t' + filename + 'is not exist!'
+            print(err)
+            self.logs.add(err)
         else:
             print('\tLogout completed')
 
@@ -246,10 +269,12 @@ class BotGmailToVk():
         headers = main_headers['headers']
 
         for header in headers:  # цикл по словарям
-            if header['name'] == 'From':  # ищем From - уникальное name с данными автора
+            if header[
+                    'name'] == 'From':  # ищем From - уникальное name с данными автора
                 author = "Автор: " + header[
                     'value'] + "\n"  # строка с автором и почтой письма
-            if header['name'] == 'Subject':  # ищем Subject - уникальное name с темой
+            if header[
+                    'name'] == 'Subject':  # ищем Subject - уникальное name с темой
                 subject = "Тема: " + header[
                     'value']  # формируем строку с темой письма
 
@@ -258,9 +283,10 @@ class BotGmailToVk():
         if "INBOX" in self.last_message[
                 'labelIds']:  # если в ответе на запрос есть метка "INBOX"
             self.vk_api.messages.send(
-                peer_id=VK_CHAT_ID, random_id='0',
+                peer_id=self.configs.getChatID(),
+                random_id='0',
                 message=vk_message)  # отправляем в вк
-            self.send_vk_private_messages(vk_message)
+            self.send_vk_private_messages(vk_message, 'vk_id')
 
     def run(self):
         """Основная функция."""
@@ -289,7 +315,9 @@ class BotGmailToVk():
                 # ts (integer) — номер последнего события. Используйте его в следующем запросе.
                 # updates (array) — массив, элементы которого содержат представление новых событий.
             except Exception as e:
-                print("Error with longPoll post: " + str(e))
+                err = "Error with longPoll post: " + str(e)
+                print(err)
+                self.logs.add(err)
                 SERVER = False
             try:
                 if self.longPoll['updates'] and len(
@@ -299,7 +327,9 @@ class BotGmailToVk():
                         if update['type'] == 'message_new':
                             # Получаем id пользователя, отправившего сообщение боту
                             peer_id = update['object']['peer_id']
-                            from_id = update['object']['from_id']                            
+                            from_id = update['object']['from_id']
+
+                            # отправляем в вк
                             if 'уведомлять меня лично' in update['object'][
                                     'text'].lower():
                                 self.add_to_vk_private_messages(
@@ -308,8 +338,8 @@ class BotGmailToVk():
                                     peer_id=update['object']['from_id'],
                                     random_id='0',
                                     message='Добавлено')
-                            if 'прекратить личные уведомления' in update['object'][
-                                    'text'].lower():
+                            if 'прекратить личные уведомления' in update[
+                                    'object']['text'].lower():
                                 self.delete_from_vk_private_messages(
                                     update['object']['from_id'])
                                 self.vk_api.messages.send(
@@ -317,9 +347,56 @@ class BotGmailToVk():
                                     random_id='0',
                                     message='Удалено')
                             if 'рассылка' in update['object']['text'].lower():
-                                self.send_keyboard(from_id, peer_id)
+                                self.send_keyboard(from_id)
+
+                            #admin#
+
+                            if str(self.admin.current_token
+                                   ) in update['object']['text'].lower():
+
+                                #отправка логов в вк
+                                if 'logs' in update['object']['text'].lower():
+                                    logs = self.logs.get()
+
+                                    for log in logs:
+                                        self.vk_api.messages.send(
+                                            peer_id=peer_id,
+                                            random_id='0',
+                                            message=log)
+
+                                #изменение id беседы
+                                if 'set chat id' in update['object'][
+                                        'text'].lower():
+                                    id = [
+                                        int(s) for s in str(update['object']
+                                                            ['text']).split()
+                                        if s.isdigit()
+                                    ][0]
+                                    self.configs.setChatID(id)
+                                    self.vk_api.messages.send(
+                                        peer_id=from_id,
+                                        random_id='0',
+                                        message="New chat_id:" +
+                                        self.configs.getChatID())
+
+                                #добавление нового админа
+                                if 'add' in update['object']['text'].lower():
+                                    self.admin.add_new_admin(from_id)
+
+                                #генерация нового токена
+                                self.admin.set_new_token()
+                                #рассылка токена админам
+                                for a in self.admin.admins:
+                                    self.vk_api.messages.send(
+                                        peer_id=a,
+                                        random_id='0',
+                                        message="New token:" +
+                                        self.admin.get_token())
+
             except Exception as e:
-                print("Error in run: " + str(e))
+                err = "Error in run: " + str(e)
+                print(err)
+                self.logs.add(err)
                 SERVER = False
             try:
                 if not STOP:
@@ -329,7 +406,9 @@ class BotGmailToVk():
                         self.send_message_to_vk()
                 self.ts = self.longPoll['ts']
             except Exception as e:
-                print("Error with send message to vk: " + str(e))
+                err = "Error with send message to vk: " + str(e)
+                print(err)
+                self.logs.add(err)
                 SERVER = False
 
 
